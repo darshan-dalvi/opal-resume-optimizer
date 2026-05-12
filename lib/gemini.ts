@@ -716,11 +716,13 @@ Extract:
 
 Rules:
 - Preserve original meaning verbatim — do not rephrase or invent
+- Preserve ALL metrics, numbers, percentages, and quantifiable results exactly as written
+- Extract bullets verbatim — keep every number, percentage, and outcome intact
 - Extract ALL projects with their full bullet descriptions, not just names
 - Extract ALL skill categories exactly as labeled in the source
 - Extract GPA / percentage / grade from education if present
 - Extract contact details (phone, email, LinkedIn, GitHub, city/location) if present
-- Do not hallucinate
+- Do not hallucinate or paraphrase
 - Return valid JSON only
 
 JSON shape:
@@ -769,16 +771,21 @@ ${text}`;
 export async function extractJDKeywords(config: AIClientConfig, text: string): Promise<JDKeywords> {
   const responseText = await generateText(
     config,
-    `Extract all relevant keywords from this job description.
+    `Extract ALL relevant keywords and phrases from this job description. Be exhaustive — capture every term a recruiter or ATS system would score against.
 
 Return categories:
-1. Hard Skills
-2. Soft Skills
-3. Industry Terms
-4. Tools & Technologies
-5. Seniority Indicators
+1. Hard Skills — technical competencies, languages, algorithms, methodologies
+2. Soft Skills — communication, collaboration, problem-solving, etc.
+3. Industry Terms — domain-specific vocabulary, standards, frameworks
+4. Tools & Technologies — software, platforms, libraries, services
+5. Seniority Indicators — experience levels, titles, ownership language
 
-Return JSON only.
+Rules:
+- Extract exact phrases where possible (e.g. "RAG pipeline" not just "pipeline")
+- Include both acronym and full form where both appear (e.g. "CI/CD" and "continuous integration")
+- Include certifications and qualifications mentioned
+- Be thorough — missing keywords here directly harms ATS matching
+- Return JSON only
 
 JSON shape:
 ${JD_KEYWORDS_JSON_SHAPE}
@@ -798,12 +805,17 @@ ${text}`,
 export async function analyzeGap(config: AIClientConfig, resumeText: string, jdText: string): Promise<GapAnalysis> {
   const responseText = await generateText(
     config,
-    `Compare the job description keywords against the resume.
+    `Compare ALL keywords from the job description against the resume.
 
-Classify keywords into:
-1. Present
-2. Missing but inferable from experience
-3. Missing and unsupported
+Extract every keyword from the JD — including hard skills, tools, frameworks, domain terms, soft skills, action verbs, certifications, and methodologies.
+
+Classify EACH keyword into exactly one of:
+1. present — keyword or a clear synonym appears in the resume
+2. inferable — candidate has related experience that implies this skill, even if the exact word is absent
+3. missing — no evidence in the resume; would require fabrication to add
+
+Be strict: a keyword is only "present" if it literally appears in the resume text.
+Be generous with "inferable" only when there is clear adjacent evidence.
 
 Do not hallucinate skills.
 
@@ -993,48 +1005,100 @@ export async function optimizeResume(
       ? buildGuardrailBlock(resumeData, allKeywords, targetRole)
       : null;
 
-  const prompt = `Rewrite the resume into an ATS-friendly editable draft for the target opportunity.
+  const prompt = `You are a professional resume writer. Rewrite the resume to score 90+ on ATS and professional resume scoring tools like Resume Worded.
 
-Goals:
-- Strengthen phrasing with action verbs
-- Improve ATS compatibility
-- Integrate the PRIORITY MISSING KEYWORDS below naturally — these are the highest-value terms ranked by ATS weight
-- Standardize section hierarchy, spacing, and formatting
-- Preserve truthfulness
+═══════════════════════════════════════════════════════════
+GOALS (all must be achieved simultaneously)
+═══════════════════════════════════════════════════════════
+1. ATS compatibility — plain single-column text; no tables, icons, graphics
+2. Keyword coverage — integrate every PRIORITY MISSING KEYWORD naturally
+3. Impact per bullet — every bullet must show outcome, scope, or metric
+4. Brevity — every bullet is ONE LINE; no paragraphs; no filler
+5. Writing quality — strong action verbs; present/past consistent tense; no passive voice
+6. Summary — 1-2 confident sentences, keyword-rich, no weak qualifiers
+7. Formatting consistency — uniform dates (Mon YYYY), uniform bullets (- ), ALL CAPS section headers
 
-ANTI-FABRICATION RULES — NEVER VIOLATE:
-- Do NOT invent or imply experience, employers, job titles, or date ranges not in the original
-- Do NOT invent metrics, numbers, or quantifiable results unless they appear in the original
-- Do NOT add tools, languages, frameworks, or technologies not mentioned in the original
-- Do NOT add certifications not listed in the original
-- Do NOT invent or imply leadership, management, or mentorship roles not present in the original
-- Only rephrase, reframe, and reorganize what already exists; never fabricate claims
+═══════════════════════════════════════════════════════════
+ACTION VERBS — USE ONLY STRONG VERBS
+═══════════════════════════════════════════════════════════
+Preferred (use these):
+  Built, Designed, Developed, Architected, Engineered, Implemented, Deployed,
+  Optimized, Reduced, Increased, Automated, Scaled, Delivered, Led, Drove,
+  Launched, Integrated, Streamlined, Accelerated, Improved, Established,
+  Migrated, Refactored, Containerized, Trained, Fine-tuned, Orchestrated
+
+BANNED (never use these):
+  Helped, Assisted, Worked on, Worked with, Participated in, Was responsible for,
+  Responsible for, Contributed to, Involved in, Supported, Handled, Did
+
+═══════════════════════════════════════════════════════════
+BULLET QUALITY RULES — EVERY BULLET MUST FOLLOW THIS
+═══════════════════════════════════════════════════════════
+- Start with a strong action verb (past tense for past roles, present for current)
+- Include at least one of: metric, %, time saved, scale, user count, cost, throughput
+- Keep to ONE LINE — never wrap into a second line
+- No trailing punctuation (no period at end)
+- No filler openers like "Responsible for" or "Helped to"
+- If original has a metric → KEEP IT verbatim; never remove numbers
+- If original has no metric → reframe around outcome/impact/scale where factually supportable
+
+═══════════════════════════════════════════════════════════
+PROFESSIONAL SUMMARY RULES
+═══════════════════════════════════════════════════════════
+- Write exactly 1-2 sentences
+- Open with the job title / domain (e.g. "AI Engineer with 2 years…" not "Results-driven…")
+- Include the 3-5 most important JD keywords naturally
+- No weak qualifiers: "approximately", "eager to", "experienced in", "skilled in", "proficient in"
+- No generic phrases: "fast-paced environment", "team player", "passionate about"
+- Use confident, declarative language
+
+═══════════════════════════════════════════════════════════
+SKILLS SECTION RULES
+═══════════════════════════════════════════════════════════
+- Keep all skill categories from original
+- Add PRIORITY MISSING KEYWORDS to the most relevant existing skill category
+- Never create a new skill that doesn't appear in original resume or JD
+
+═══════════════════════════════════════════════════════════
+DATE & FORMATTING CONSISTENCY
+═══════════════════════════════════════════════════════════
+- Dates: use "Mon YYYY – Mon YYYY" or "Mon YYYY – Present" uniformly
+- All section headings in ALL CAPS
+- All bullets start with "- "
+- No mixed date formats in the same resume
+
+═══════════════════════════════════════════════════════════
+ANTI-FABRICATION RULES — NEVER VIOLATE
+═══════════════════════════════════════════════════════════
+- Do NOT invent employers, job titles, or date ranges
+- Do NOT invent metrics unless clearly present in original
+- Do NOT add tools or technologies not in the original resume
+- Do NOT add certifications not in the original
+- Do NOT invent leadership, management, or mentorship roles
+- Only rephrase, reframe, and reorder what already exists
 ${guardrailBlock ? `\n${guardrailBlock}\n` : ""}
-Output constraints:
-- Keep the output as plain text resume content
-- Do not include markdown fences or commentary
-- All JSON strings must be valid JSON string values
-- Escape line breaks inside string fields as \\n rather than raw newlines
-- Preserve the CONTACT section exactly as given — do not modify, move, or omit it
-- Keep all section headings in ALL CAPS (CONTACT, PROFESSIONAL SUMMARY, CORE SKILLS, PROFESSIONAL EXPERIENCE, PROJECTS, EDUCATION, CERTIFICATIONS)
-- Output the FULL resume — do not truncate or omit any section
+═══════════════════════════════════════════════════════════
+OUTPUT CONSTRAINTS
+═══════════════════════════════════════════════════════════
+- Plain text resume only — no markdown, no fences, no commentary
+- All JSON string values must be properly escaped
+- Escape line breaks as \\n inside JSON string fields
+- Preserve CONTACT section exactly — do not modify or omit it
+- Section order: CONTACT → PROFESSIONAL SUMMARY → CORE SKILLS → PROFESSIONAL EXPERIENCE → PROJECTS → EDUCATION → CERTIFICATIONS
+- Output the FULL resume — no truncation
 
-Focus role:
-${targetRole}
+Focus role: ${targetRole}
 
-Priority missing keywords (ranked by ATS weight — address as many as possible WITHOUT inventing facts):
+Priority missing keywords (add as many as possible WITHOUT fabricating):
 ${rankedMissing.map((kw, i) => `${i + 1}. ${kw}`).join("\n")}
 
-Additional context keywords:
-${focusKeywords.join(", ") || "(none)"}
+Additional focus keywords: ${focusKeywords.join(", ") || "(none)"}
 
-Use achievement-oriented bullet points when the source material supports them.
-
-Return JSON only with:
+Return JSON only:
 - revisedResume: the COMPLETE revised plain-text resume
-- appliedKeywords: keywords from the missing list that were naturally incorporated
-- deferredKeywords: keywords that could not be added without inventing facts
-- editNotes: up to 8 high-value edits with category, before, after, and rationale
+- appliedKeywords: keywords from the missing list incorporated
+- deferredKeywords: keywords that cannot be added without fabrication
+- editNotes: up to 8 most impactful edits with category, before, after, rationale
 
 JSON shape:
 ${OPTIMIZATION_RESPONSE_JSON_SHAPE}
@@ -1132,8 +1196,15 @@ Check for ALL of the following fabrication types:
 - Invented team leadership, people management, or mentoring claims not in the original
 - Any implied years-of-experience claim that exceeds what the original resume shows
 
-Return PASS if NO fabrications are found.
-Return FAIL if ANY fabrication from the list above is detected, and list each violation briefly in "reasons".
+Also check for writing quality regressions:
+- Are weak verbs used ("helped", "assisted", "worked on", "responsible for", "participated in")?
+- Are there bullets longer than two lines?
+- Are there filler phrases ("fast-paced environment", "team player", "passionate about")?
+- Is the summary longer than 2 sentences?
+- Are any metrics from the original resume removed in the optimized version?
+
+Return PASS if NO fabrications AND no writing quality regressions are found.
+Return FAIL if ANY issue from either list is detected, and list each violation briefly in "reasons".
 
 Return JSON only.
 
