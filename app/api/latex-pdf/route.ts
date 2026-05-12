@@ -38,8 +38,9 @@ export async function POST(request: Request) {
 
     const { pdfBuffer, engine } = await compileLatexToPdf(body.latex);
     const fileName = sanitizeFileName(body.fileName || "final-resume.pdf");
+    const pdfBody = new Uint8Array(pdfBuffer);
 
-    return new NextResponse(pdfBuffer, {
+    return new NextResponse(pdfBody, {
       status: 200,
       headers: {
         "Content-Type": "application/pdf",

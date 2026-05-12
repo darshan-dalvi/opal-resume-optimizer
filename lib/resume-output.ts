@@ -503,7 +503,10 @@ function renderProjectsSection(projects: ResumeData["projects"]) {
   if (!projects?.length) return "";
 
   const items = projects.map((project) => {
-    const subLine = [project.tech, project.period].filter(Boolean).map(escapeHtml).join(" \u00b7 ");
+    const subLine = [project.tech, project.period]
+      .filter((value): value is string => Boolean(value))
+      .map(escapeHtml)
+      .join(" \u00b7 ");
     const bullets = htmlBullets(project.bullets ?? []);
     return `<div class="exp-item" style="margin-bottom:6px;">
   <div class="exp-header">

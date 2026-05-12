@@ -439,6 +439,7 @@ export default function ResumeOptimizer() {
             targetRole.trim() || DEFAULT_TARGET_ROLE,
             focusKeywords,
             keywords,
+            parsedResume,
           );
 
           let candidate = optimized.revisedResume.trim() || currentResume;

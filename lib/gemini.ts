@@ -184,13 +184,64 @@ function extractGeminiText(data: unknown) {
   );
 }
 
-function extractProviderError(data: unknown) {
-  const payload = data as {
-    error?: { message?: string };
-    message?: string;
-  };
+function extractProviderError(data: unknown, rawText?: string) {
+  if (typeof data === "string") {
+    return data.trim() || "Provider returned an unknown error.";
+  }
 
-  return payload.error?.message || payload.message || "Unknown provider error";
+  const payload = data as Record<string, unknown>;
+  const error = payload.error;
+
+  if (typeof error === "string" && error.trim()) {
+    return error;
+  }
+
+  if (error && typeof error === "object") {
+    const errorMessage = (error as { message?: unknown }).message;
+    const errorType = (error as { type?: unknown }).type;
+    const errorCode = (error as { code?: unknown }).code;
+    const errorDetail = (error as { detail?: unknown }).detail ?? (error as { details?: unknown }).details;
+
+    if (typeof errorMessage === "string" && errorMessage.trim()) {
+      const meta = [errorCode, errorType].filter((value) => typeof value === "string" && value).join(" / ");
+      return meta ? `${errorMessage} (${meta})` : errorMessage;
+    }
+
+    if (typeof errorDetail === "string" && errorDetail.trim()) {
+      return errorDetail;
+    }
+
+    const errorKeys = Object.entries(error)
+      .filter(([, value]) => typeof value === "string")
+      .map(([key, value]) => `${key}: ${value}`)
+      .join("; ");
+    if (errorKeys) {
+      return errorKeys;
+    }
+  }
+
+  const message = payload.message;
+  if (typeof message === "string" && message.trim()) {
+    return message;
+  }
+
+  const status = payload.status;
+  const code = payload.code;
+  if ((typeof status === "string" || typeof status === "number") && (typeof code === "string" || typeof code === "number")) {
+    return `Provider returned status ${status} code ${code}`;
+  }
+
+  if (typeof rawText === "string" && rawText.trim()) {
+    return `Provider returned error: ${rawText.trim().slice(0, 1200)}`;
+  }
+
+  return "Provider returned an unknown error.";
+}
+
+async function parseResponseBody(response: Response) {
+  const text = await response.text();
+  const parsed = tryParseJsonResponse<unknown>(text);
+  return { data: parsed ?? text, rawText: text };
 }
 
 function parseCustomHeaders(rawHeaders?: string) {
@@ -486,10 +537,10 @@ async function callOpenAICompatible(
     body: JSON.stringify(body),
   });
 
-  const data = (await response.json()) as unknown;
+  const { data, rawText } = await parseResponseBody(response);
 
   if (!response.ok) {
-    throw new Error(extractProviderError(data));
+    throw new Error(extractProviderError(data, rawText));
   }
 
   return extractOpenAICompatibleText(data);
@@ -512,10 +563,10 @@ async function callAnthropic(config: AIClientConfig, prompt: string) {
     }),
   });
 
-  const data = (await response.json()) as unknown;
+  const { data, rawText } = await parseResponseBody(response);
 
   if (!response.ok) {
-    throw new Error(extractProviderError(data));
+    throw new Error(extractProviderError(data, rawText));
   }
 
   return extractAnthropicText(data);
@@ -547,10 +598,10 @@ async function callGemini(config: AIClientConfig, prompt: string) {
     }),
   });
 
-  const data = (await response.json()) as unknown;
+  const { data, rawText } = await parseResponseBody(response);
 
   if (!response.ok) {
-    throw new Error(extractProviderError(data));
+    throw new Error(extractProviderError(data, rawText));
   }
 
   return extractGeminiText(data);
@@ -579,10 +630,10 @@ async function callCustomProvider(config: AIClientConfig, prompt: string) {
     }),
   });
 
-  const data = (await response.json()) as unknown;
+  const { data, rawText } = await parseResponseBody(response);
 
   if (!response.ok) {
-    throw new Error(extractProviderError(data));
+    throw new Error(extractProviderError(data, rawText));
   }
 
   return extractOpenAICompatibleText(data);
@@ -776,6 +827,130 @@ ${jdText}`,
   );
 }
 
+// ─── Guardrail helpers ───────────────────────────────────────────────────────
+
+/**
+ * Estimate total years of professional experience from ResumeData.
+ * Only full-time / non-internship roles count toward hasPaidEmployment.
+ */
+function estimateExperienceYears(resume: ResumeData): {
+  totalYears: number;
+  hasOnlyProjectsOrInternships: boolean;
+} {
+  const CURRENT_YEAR = new Date().getFullYear();
+
+  function parseYear(s: string): number | null {
+    if (/present|current|now/i.test(s.trim())) return CURRENT_YEAR;
+    const m = s.match(/\b(19|20)\d{2}\b/);
+    return m ? parseInt(m[0], 10) : null;
+  }
+
+  let totalMonths = 0;
+  let hasPaidEmployment = false;
+
+  for (const job of resume.experience ?? []) {
+    const isInternship = /intern(ship)?|trainee|co[\s-]?op/i.test(job.title ?? "");
+    if (!isInternship) hasPaidEmployment = true;
+
+    const parts = (job.period ?? "").split(/\s*[-–—]\s*|\s+to\s+/i);
+    const startYear = parts[0] ? parseYear(parts[0]) : null;
+    let endYear: number | null = parts[1] ? parseYear(parts[1]) : null;
+    if (!endYear && startYear) endYear = startYear + 1; // single-year entry → ~1 year
+
+    if (startYear && endYear && endYear >= startYear) {
+      totalMonths += (endYear - startYear) * 12;
+    }
+  }
+
+  return {
+    totalYears: Math.min(totalMonths / 12, 40),
+    hasOnlyProjectsOrInternships: !hasPaidEmployment,
+  };
+}
+
+const SENIORITY_TITLE_PATTERN =
+  /\b(senior|lead|principal|staff engineer|architect|director|manager|head of|vp)\b/i;
+
+/**
+ * Detect whether the JD / target role demands seniority and how many years.
+ */
+function detectJDSeniority(
+  keywords: JDKeywords,
+  targetRole: string,
+): { requiredYears: number | null; requiresSeniority: boolean } {
+  let requiredYears: number | null = null;
+  let requiresSeniority = SENIORITY_TITLE_PATTERN.test(targetRole);
+
+  for (const indicator of keywords.seniorityIndicators) {
+    const yearsMatch = indicator.match(/(\d+)\+?\s*years?/i);
+    if (yearsMatch) {
+      const years = parseInt(yearsMatch[1], 10);
+      if (requiredYears === null || years > requiredYears) requiredYears = years;
+    }
+    if (SENIORITY_TITLE_PATTERN.test(indicator)) requiresSeniority = true;
+  }
+
+  // Also scan hard skills / industry terms for seniority language
+  const allJdText = [...keywords.hardSkills, ...keywords.industryTerms].join(" ");
+  if (SENIORITY_TITLE_PATTERN.test(allJdText)) requiresSeniority = true;
+
+  return { requiredYears, requiresSeniority };
+}
+
+/**
+ * Build a guardrail block to inject into the optimization prompt when the
+ * candidate's experience level is significantly below what the JD requires.
+ * Returns null when no mismatch is detected.
+ */
+function buildGuardrailBlock(
+  resume: ResumeData,
+  jdKeywords: JDKeywords,
+  targetRole: string,
+): string | null {
+  const { totalYears, hasOnlyProjectsOrInternships } = estimateExperienceYears(resume);
+  const { requiredYears, requiresSeniority } = detectJDSeniority(jdKeywords, targetRole);
+
+  const isEarlyCareer = totalYears < 2 || hasOnlyProjectsOrInternships;
+  const hasYearsMismatch = requiredYears !== null && totalYears < requiredYears - 0.5;
+
+  if (!isEarlyCareer && !hasYearsMismatch) return null;
+
+  const lines: string[] = [
+    "SENIORITY GUARDRAIL — NON-NEGOTIABLE:",
+    "",
+  ];
+
+  if (hasYearsMismatch && requiredYears !== null) {
+    const approxYears = Math.round(totalYears * 10) / 10;
+    lines.push(
+      `  Candidate has ~${approxYears} year(s) of experience; the JD requires ${requiredYears}+ years.`,
+    );
+  }
+  if (isEarlyCareer && requiresSeniority) {
+    lines.push(
+      "  Candidate is early-career (< 2 years or internships/projects only) but the JD targets a senior/lead level.",
+    );
+  }
+
+  lines.push(
+    "",
+    "YOU MUST:",
+    "  - Emphasize transferable skills, relevant projects, and any internship / open-source / freelance work",
+    "  - Frame the candidate as an individual contributor, learner, or junior team member",
+    "  - Use strong action verbs that match the candidate's actual scope of work",
+    "",
+    "YOU MUST NOT:",
+    '  - Apply "Senior", "Lead", "Principal", "Architect", or similar seniority titles anywhere in the output',
+    "  - Imply or state the candidate has " +
+      (requiredYears !== null ? `${requiredYears}+` : "more") +
+      " years of experience",
+    "  - Invent or imply team leadership, people management, or mentoring unless explicitly stated in the original",
+    "  - Add certifications, tools, or technologies not present in the original resume",
+  );
+
+  return lines.join("\n");
+}
+
 /**
  * Rank missing keywords by descending ATS weight so the optimizer focuses on
  * high-value terms first. Hard skills/tools (weight 3) come before industry terms
@@ -807,10 +982,16 @@ export async function optimizeResume(
   targetRole: string,
   focusKeywords: string[],
   allKeywords?: JDKeywords,
+  resumeData?: ResumeData,
 ): Promise<OptimizationResult> {
   const rankedMissing = allKeywords
     ? rankMissingKeywords(missingKeywords, allKeywords)
     : missingKeywords.slice(0, 15);
+
+  const guardrailBlock =
+    resumeData && allKeywords
+      ? buildGuardrailBlock(resumeData, allKeywords, targetRole)
+      : null;
 
   const prompt = `Rewrite the resume into an ATS-friendly editable draft for the target opportunity.
 
@@ -821,11 +1002,15 @@ Goals:
 - Standardize section hierarchy, spacing, and formatting
 - Preserve truthfulness
 
-Constraints:
-- Do not invent experience
-- Do not invent metrics
-- Do not add unsupported tools
-- Only rephrase or re-frame existing content; never fabricate claims
+ANTI-FABRICATION RULES — NEVER VIOLATE:
+- Do NOT invent or imply experience, employers, job titles, or date ranges not in the original
+- Do NOT invent metrics, numbers, or quantifiable results unless they appear in the original
+- Do NOT add tools, languages, frameworks, or technologies not mentioned in the original
+- Do NOT add certifications not listed in the original
+- Do NOT invent or imply leadership, management, or mentorship roles not present in the original
+- Only rephrase, reframe, and reorganize what already exists; never fabricate claims
+${guardrailBlock ? `\n${guardrailBlock}\n` : ""}
+Output constraints:
 - Keep the output as plain text resume content
 - Do not include markdown fences or commentary
 - All JSON strings must be valid JSON string values
@@ -938,13 +1123,17 @@ export async function validateOptimization(
     config,
     `Compare the optimized resume against the original resume.
 
-Identify:
-- hallucinated skills
-- invented tools
-- fake achievements
-- unsupported claims
+Check for ALL of the following fabrication types:
+- Hallucinated or added skills, tools, or technologies not in the original
+- Invented job titles, employers, or date ranges
+- Fabricated certifications not in the original
+- Invented metrics, numbers, or quantifiable claims not in the original
+- Seniority inflation: does the optimized resume imply "Senior", "Lead", "Principal", "Architect", or similar titles / seniority language that the original does not support?
+- Invented team leadership, people management, or mentoring claims not in the original
+- Any implied years-of-experience claim that exceeds what the original resume shows
 
-Return PASS or FAIL with reasons.
+Return PASS if NO fabrications are found.
+Return FAIL if ANY fabrication from the list above is detected, and list each violation briefly in "reasons".
 
 Return JSON only.
 

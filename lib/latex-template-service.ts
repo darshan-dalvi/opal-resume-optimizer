@@ -505,7 +505,10 @@ ${entry.bullets.map((bullet) => `\\item ${escapeLatex(bullet)}`).join("\n")}
 ${projects
   .map(
     (project) => {
-      const techLine = [project.tech, project.period].filter(Boolean).map(escapeLatex).join(" | ");
+      const techLine = [project.tech, project.period]
+        .filter((value): value is string => Boolean(value))
+        .map(escapeLatex)
+        .join(" | ");
       const bulletBlock = project.bullets.length
         ? `\\begin{itemize}[nosep,leftmargin=1em,itemsep=2pt]
 ${project.bullets.map((b) => `\\item ${escapeLatex(b)}`).join("\n")}
