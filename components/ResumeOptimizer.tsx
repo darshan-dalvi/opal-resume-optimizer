@@ -231,6 +231,8 @@ export default function ResumeOptimizer() {
     atsScore: 0,
     isOptimizing: false,
   });
+  const [trackedChangesOpen, setTrackedChangesOpen] = useState(false);
+  const [modificationsOpen, setModificationsOpen] = useState(false);
 
   useEffect(() => {
     let isMounted = true;
@@ -1159,174 +1161,193 @@ export default function ResumeOptimizer() {
                     </div>
                   </div>
 
+                  {/* ── Download Section 1: Validated Final Resume ── */}
                   {analysis.optimizedResume && (
-                    <div className="p-8 bg-white border border-black/5 rounded-2xl shadow-sm">
-                      <div className="flex justify-between items-center mb-6">
-                        <h3 className="text-xl font-bold uppercase tracking-tight flex items-center gap-2">
-                          <RefreshCcw className="w-5 h-5 text-blue-500" />
-                          Validated Final Resume
-                        </h3>
-                        {analysis.validation && (
-                          <div className={cn(
-                            "flex items-center gap-2 px-3 py-1 rounded-full text-[10px] font-bold tracking-widest",
-                            analysis.validation.pass ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"
-                          )}>
-                            {analysis.validation.pass ? <ShieldCheck className="w-3 h-3"/> : <AlertCircle className="w-3 h-3"/>}
-                            {analysis.validation.pass ? "FACT-PASS" : "FACT-FAIL"}
+                    <div className="bg-white border border-black/5 rounded-2xl shadow-sm overflow-hidden">
+                      {/* header */}
+                      <div className="px-8 pt-7 pb-5 border-b border-black/5">
+                        <div className="flex items-center justify-between gap-4">
+                          <div className="flex items-center gap-3">
+                            <div className="w-8 h-8 rounded-lg bg-black flex items-center justify-center shrink-0">
+                              <ShieldCheck className="w-4 h-4 text-white" />
+                            </div>
+                            <div>
+                              <h3 className="font-bold text-base uppercase tracking-tight">Validated Final Resume</h3>
+                              <p className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground mt-0.5">
+                                {analysis.optimizationSkipped ? "Optimization skipped · Score ≥ 90%" : `Optimized · ${analysis.optimizedScore ?? analysis.atsScore}% ATS score`}
+                              </p>
+                            </div>
                           </div>
-                        )}
+                          {analysis.validation && (
+                            <div className={cn(
+                              "flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[10px] font-bold tracking-widest shrink-0",
+                              analysis.validation.pass ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"
+                            )}>
+                              {analysis.validation.pass ? <ShieldCheck className="w-3 h-3" /> : <AlertCircle className="w-3 h-3" />}
+                              {analysis.validation.pass ? "FACT-PASS" : "FACT-FAIL"}
+                            </div>
+                          )}
+                        </div>
                       </div>
 
-                      <p className="text-xs font-mono uppercase tracking-widest text-muted-foreground mb-4">
-                        {analysis.optimizationSkipped
-                          ? "Optimization branch skipped. Structured resume validated and passed to final output generation."
-                          : "Optimization branch completed. Validated resume is ready for output generation and export."}
-                      </p>
-
-                      <div className="bg-gray-50 rounded-xl p-6 h-[400px] overflow-y-auto mb-6">
-                        <pre className="text-xs font-sans whitespace-pre-wrap leading-relaxed text-gray-700">
-                          {analysis.optimizedResume}
-                        </pre>
-                      </div>
-
+                      {/* fact-fail reasons */}
                       {analysis.validation && !analysis.validation.pass && analysis.validation.reasons.length > 0 && (
-                        <div className="mb-6 rounded-xl border border-red-100 bg-red-50 p-4 text-xs text-red-700">
-                          {analysis.validation.reasons.slice(0, 3).join(" // ")}
+                        <div className="mx-8 mt-5 rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-xs text-red-700">
+                          {analysis.validation.reasons.slice(0, 3).join(" · ")}
                         </div>
                       )}
 
-                      <div className="flex flex-wrap gap-4">
-                        <button 
-                          onClick={exportDOCX}
-                          className="flex-1 min-w-[180px] py-3 bg-black text-white rounded-xl font-bold uppercase text-xs tracking-widest flex items-center justify-center gap-2 hover:bg-black/80 transition-all"
-                        >
-                          <Download className="w-4 h-4" /> Export Word DOCX
-                        </button>
-                        <button 
-                          onClick={exportPDF}
-                          disabled={!analysis.parsedResume}
-                          className="flex-1 min-w-[180px] border border-black text-black rounded-xl font-bold uppercase text-xs tracking-widest flex items-center justify-center gap-2 hover:bg-black hover:text-white transition-all py-3 disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                          <Download className="w-4 h-4" /> Export PDF
-                        </button>
-                        <button 
-                          onClick={exportLatexTemplate}
-                          className="flex-1 min-w-[180px] border border-black text-black rounded-xl font-bold uppercase text-xs tracking-widest flex items-center justify-center gap-2 hover:bg-black hover:text-white transition-all py-3"
-                        >
-                          <Download className="w-4 h-4" /> Export TeX Source
-                        </button>
-                      </div>
-                    </div>
-                  )}
-
-                  {analysis.latexTemplate && (
-                    <div className="p-8 bg-white border border-black/5 rounded-2xl shadow-sm">
-                      <div className="flex justify-between items-center mb-6 gap-4">
-                        <h3 className="text-xl font-bold uppercase tracking-tight flex items-center gap-2">
-                          <FileCode className="w-5 h-5 text-blue-500" />
-                          Final Output Generator
-                        </h3>
-                        <p className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground">
-                          {(analysis.latexTemplateLabel || selectedLatexTemplate?.label || "LaTeX template output").toUpperCase()}
-                        </p>
+                      {/* preview */}
+                      <div className="mx-8 mt-5 bg-gray-50 rounded-xl p-5 h-[360px] overflow-y-auto">
+                        <pre className="text-xs font-sans whitespace-pre-wrap leading-relaxed text-gray-700">{analysis.optimizedResume}</pre>
                       </div>
 
-                      <div className="rounded-xl bg-gray-50 p-6 max-h-[420px] overflow-y-auto">
-                        <pre className="text-xs font-mono whitespace-pre-wrap leading-relaxed text-gray-700">
-                          {analysis.latexTemplate}
-                        </pre>
-                      </div>
-
-                      <div className="mt-6 flex flex-wrap gap-4">
-                        <button
-                          onClick={exportLatexTemplate}
-                          className="flex-1 min-w-[180px] border border-black text-black rounded-xl font-bold uppercase text-xs tracking-widest flex items-center justify-center gap-2 hover:bg-black hover:text-white transition-all py-3"
-                        >
-                          <Download className="w-4 h-4" /> Export TeX Source
-                        </button>
-                        <button
-                          onClick={exportLatexPdf}
-                          disabled={!analysis.latexTemplate || isExportingLatexPdf}
-                          className="flex-1 min-w-[180px] py-3 bg-black text-white rounded-xl font-bold uppercase text-xs tracking-widest flex items-center justify-center gap-2 hover:bg-black/80 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                          <Download className="w-4 h-4" />
-                          {isExportingLatexPdf ? "Compiling…" : "Export LaTeX PDF"}
-                        </button>
-                      </div>
-
-                      <p className="mt-4 text-[10px] font-mono uppercase tracking-widest text-muted-foreground">
-                        LaTeX PDF is compiled server-side via pdflatex — preserves template fonts, spacing, and layout exactly.
-                      </p>
-                    </div>
-                  )}
-
-                  {analysis.trackedChanges && analysis.trackedChanges.length > 0 && analysis.diffSummary && (analysis.diffSummary.added > 0 || analysis.diffSummary.removed > 0) && (
-                    <div className="p-8 bg-white border border-black/5 rounded-2xl shadow-sm">
-                      <div className="flex justify-between items-center mb-6 gap-4">
-                        <h3 className="text-xl font-bold uppercase tracking-tight flex items-center gap-2">
-                          <FileCode className="w-5 h-5 text-blue-500" />
-                          Tracked Changes
-                        </h3>
-                        <p className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground">
-                          {analysis.diffSummary?.added ?? 0} additions // {analysis.diffSummary?.removed ?? 0} removals
-                        </p>
-                      </div>
-
-                      <div className="space-y-2 max-h-[420px] overflow-y-auto pr-1">
-                        {analysis.trackedChanges.map((line, index) => (
-                          <div
-                            key={`${line.type}-${index}`}
-                            className={cn(
-                              "rounded-xl border px-4 py-3 text-xs font-mono whitespace-pre-wrap",
-                              line.type === "added" && "border-blue-200 bg-blue-50 text-blue-900",
-                              line.type === "removed" && "border-red-200 bg-red-50 text-red-800",
-                              line.type === "context" && "border-black/5 bg-gray-50 text-gray-700",
-                            )}
+                      {/* downloads */}
+                      <div className="px-8 pb-7 pt-5">
+                        <p className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground mb-3">Export as</p>
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                          <button
+                            onClick={exportDOCX}
+                            className="flex items-center justify-center gap-2 py-3 px-4 bg-black text-white rounded-xl font-bold text-xs tracking-widest uppercase hover:bg-black/80 transition-all"
                           >
-                            <span className="mr-2 inline-flex min-w-4 justify-center font-black">
-                              {line.type === "added" ? "+" : line.type === "removed" ? "-" : "="}
-                            </span>
-                            <span className={cn(line.type === "removed" && "line-through")}>
-                              {line.value || "[blank line]"}
-                            </span>
-                          </div>
-                        ))}
+                            <Download className="w-3.5 h-3.5" /> Word DOCX
+                          </button>
+                          <button
+                            onClick={exportPDF}
+                            disabled={!analysis.parsedResume}
+                            className="flex items-center justify-center gap-2 py-3 px-4 border border-black text-black rounded-xl font-bold text-xs tracking-widest uppercase hover:bg-black hover:text-white transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                          >
+                            <Download className="w-3.5 h-3.5" /> React PDF
+                          </button>
+                          <button
+                            onClick={exportLatexTemplate}
+                            className="flex items-center justify-center gap-2 py-3 px-4 border border-black text-black rounded-xl font-bold text-xs tracking-widest uppercase hover:bg-black hover:text-white transition-all"
+                          >
+                            <Download className="w-3.5 h-3.5" /> TeX Source
+                          </button>
+                        </div>
                       </div>
                     </div>
                   )}
 
-                  {analysis.editNotes && analysis.editNotes.length > 0 && (
-                    <div className="p-8 bg-white border border-black/5 rounded-2xl shadow-sm">
-                      <div className="flex justify-between items-center mb-6 gap-4">
-                        <h3 className="text-xl font-bold uppercase tracking-tight flex items-center gap-2">
-                          <Target className="w-5 h-5 text-blue-500" />
-                          Highlighted Modifications
-                        </h3>
-                        <p className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground">
-                          Stronger phrasing // ATS format // keyword alignment
-                        </p>
+                  {/* ── Download Section 2: Final Output Generator ── */}
+                  {analysis.latexTemplate && (
+                    <div className="bg-white border border-black/5 rounded-2xl shadow-sm overflow-hidden">
+                      {/* header */}
+                      <div className="px-8 pt-7 pb-5 border-b border-black/5">
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center shrink-0">
+                            <FileCode className="w-4 h-4 text-white" />
+                          </div>
+                          <div>
+                            <h3 className="font-bold text-base uppercase tracking-tight">Final Output Generator</h3>
+                            <p className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground mt-0.5">
+                              {(analysis.latexTemplateLabel || selectedLatexTemplate?.label || "LaTeX Template").toUpperCase()} · Compiled server-side via pdflatex
+                            </p>
+                          </div>
+                        </div>
                       </div>
 
-                      <div className="space-y-4">
-                        {analysis.editNotes.map((note, index) => (
-                          <div key={`${note.category}-${index}`} className="rounded-xl border border-black/5 p-4 space-y-3">
-                            <div className="text-[10px] font-mono uppercase tracking-widest text-blue-600">
-                              {note.category}
-                            </div>
-                            <p className="text-sm text-muted-foreground">{note.rationale}</p>
-                            <div className="space-y-2 text-xs">
-                              <div className="rounded-lg border border-red-100 bg-red-50 p-3">
-                                <div className="mb-1 text-[10px] font-mono uppercase tracking-widest text-red-600">Before</div>
-                                <p className="whitespace-pre-wrap text-gray-700">{note.before}</p>
-                              </div>
-                              <div className="rounded-lg border border-blue-100 bg-blue-50 p-3">
-                                <div className="mb-1 text-[10px] font-mono uppercase tracking-widest text-blue-600">After</div>
-                                <p className="whitespace-pre-wrap text-gray-700">{note.after}</p>
-                              </div>
-                            </div>
-                          </div>
-                        ))}
+                      {/* LaTeX source preview */}
+                      <div className="mx-8 mt-5 rounded-xl bg-gray-950 p-5 max-h-[320px] overflow-y-auto">
+                        <pre className="text-[11px] font-mono whitespace-pre-wrap leading-relaxed text-green-400">{analysis.latexTemplate}</pre>
                       </div>
+
+                      {/* downloads */}
+                      <div className="px-8 pb-7 pt-5">
+                        <p className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground mb-3">Export as</p>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          <button
+                            onClick={exportLatexTemplate}
+                            className="flex items-center justify-center gap-2 py-3 px-4 border border-black text-black rounded-xl font-bold text-xs tracking-widest uppercase hover:bg-black hover:text-white transition-all"
+                          >
+                            <Download className="w-3.5 h-3.5" /> TeX Source
+                          </button>
+                          <button
+                            onClick={exportLatexPdf}
+                            disabled={!analysis.latexTemplate || isExportingLatexPdf}
+                            className="flex items-center justify-center gap-2 py-3 px-4 bg-blue-600 text-white rounded-xl font-bold text-xs tracking-widest uppercase hover:bg-blue-700 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                          >
+                            <Download className="w-3.5 h-3.5" />
+                            {isExportingLatexPdf ? "Compiling…" : "LaTeX PDF"}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* ── Accordion: Tracked Changes ── */}
+                  {analysis.trackedChanges && analysis.trackedChanges.length > 0 && analysis.diffSummary && (analysis.diffSummary.added > 0 || analysis.diffSummary.removed > 0) && (
+                    <div className="bg-white border border-black/5 rounded-2xl shadow-sm overflow-hidden">
+                      <button
+                        onClick={() => setTrackedChangesOpen(o => !o)}
+                        className="w-full flex items-center justify-between px-8 py-5 hover:bg-gray-50 transition-colors"
+                      >
+                        <div className="flex items-center gap-3">
+                          <FileCode className="w-4 h-4 text-blue-500" />
+                          <span className="font-bold text-sm uppercase tracking-tight">Tracked Changes</span>
+                          <span className="flex gap-1.5 ml-1">
+                            <span className="px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 text-[10px] font-bold font-mono">+{analysis.diffSummary.added}</span>
+                            <span className="px-2 py-0.5 rounded-full bg-red-50 text-red-700 text-[10px] font-bold font-mono">−{analysis.diffSummary.removed}</span>
+                          </span>
+                        </div>
+                        <ChevronRight className={cn("w-4 h-4 text-muted-foreground transition-transform", trackedChangesOpen && "rotate-90")} />
+                      </button>
+                      {trackedChangesOpen && (
+                        <div className="px-8 pb-6 space-y-1.5 max-h-[480px] overflow-y-auto">
+                          {analysis.trackedChanges.map((line, index) => (
+                            <div
+                              key={`${line.type}-${index}`}
+                              className={cn(
+                                "rounded-lg border px-3 py-2 text-xs font-mono whitespace-pre-wrap",
+                                line.type === "added" && "border-blue-200 bg-blue-50 text-blue-900",
+                                line.type === "removed" && "border-red-200 bg-red-50 text-red-800",
+                                line.type === "context" && "border-black/5 bg-gray-50 text-gray-600",
+                              )}
+                            >
+                              <span className="mr-2 font-black">{line.type === "added" ? "+" : line.type === "removed" ? "−" : " "}</span>
+                              <span className={cn(line.type === "removed" && "line-through opacity-70")}>{line.value || "\u00a0"}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* ── Accordion: Highlighted Modifications ── */}
+                  {analysis.editNotes && analysis.editNotes.length > 0 && (
+                    <div className="bg-white border border-black/5 rounded-2xl shadow-sm overflow-hidden">
+                      <button
+                        onClick={() => setModificationsOpen(o => !o)}
+                        className="w-full flex items-center justify-between px-8 py-5 hover:bg-gray-50 transition-colors"
+                      >
+                        <div className="flex items-center gap-3">
+                          <Target className="w-4 h-4 text-blue-500" />
+                          <span className="font-bold text-sm uppercase tracking-tight">Highlighted Modifications</span>
+                          <span className="px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 text-[10px] font-bold font-mono ml-1">{analysis.editNotes.length}</span>
+                        </div>
+                        <ChevronRight className={cn("w-4 h-4 text-muted-foreground transition-transform", modificationsOpen && "rotate-90")} />
+                      </button>
+                      {modificationsOpen && (
+                        <div className="px-8 pb-6 space-y-3">
+                          {analysis.editNotes.map((note, index) => (
+                            <div key={`${note.category}-${index}`} className="rounded-xl border border-black/5 bg-gray-50 p-4 space-y-3">
+                              <span className="text-[10px] font-mono uppercase tracking-widest text-blue-600 font-bold">{note.category}</span>
+                              <p className="text-xs text-muted-foreground leading-relaxed">{note.rationale}</p>
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                                <div className="rounded-lg border border-red-100 bg-red-50 p-3">
+                                  <div className="mb-1.5 text-[10px] font-mono uppercase tracking-widest text-red-500 font-bold">Before</div>
+                                  <p className="whitespace-pre-wrap text-gray-700 leading-relaxed">{note.before}</p>
+                                </div>
+                                <div className="rounded-lg border border-blue-100 bg-blue-50 p-3">
+                                  <div className="mb-1.5 text-[10px] font-mono uppercase tracking-widest text-blue-500 font-bold">After</div>
+                                  <p className="whitespace-pre-wrap text-gray-700 leading-relaxed">{note.after}</p>
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
